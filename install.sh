@@ -33,22 +33,85 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Install system dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+
+info "Checking system dependencies..."
+
+if command -v apt-get &>/dev/null; then
+    PKG_MANAGER="apt"
+    REQUIRED_PKGS=(curl ca-certificates build-essential python3 openssl)
+
+    MISSING_PKGS=()
+    for pkg in "${REQUIRED_PKGS[@]}"; do
+        if ! dpkg -s "$pkg" &>/dev/null; then
+            MISSING_PKGS+=("$pkg")
+        fi
+    done
+
+    if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
+        info "Installing missing packages: ${MISSING_PKGS[*]}"
+        apt-get update -qq
+        apt-get install -y "${MISSING_PKGS[@]}"
+    fi
+
+elif command -v dnf &>/dev/null; then
+    PKG_MANAGER="dnf"
+    REQUIRED_PKGS=(curl ca-certificates gcc gcc-c++ make python3 openssl)
+
+    MISSING_PKGS=()
+    for pkg in "${REQUIRED_PKGS[@]}"; do
+        if ! rpm -q "$pkg" &>/dev/null; then
+            MISSING_PKGS+=("$pkg")
+        fi
+    done
+
+    if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
+        info "Installing missing packages: ${MISSING_PKGS[*]}"
+        dnf install -y "${MISSING_PKGS[@]}"
+    fi
+
+elif command -v yum &>/dev/null; then
+    PKG_MANAGER="yum"
+    REQUIRED_PKGS=(curl ca-certificates gcc gcc-c++ make python3 openssl)
+
+    MISSING_PKGS=()
+    for pkg in "${REQUIRED_PKGS[@]}"; do
+        if ! rpm -q "$pkg" &>/dev/null; then
+            MISSING_PKGS+=("$pkg")
+        fi
+    done
+
+    if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
+        info "Installing missing packages: ${MISSING_PKGS[*]}"
+        yum install -y "${MISSING_PKGS[@]}"
+    fi
+
+else
+    error "Unsupported package manager. Install these manually: curl, build tools (gcc/g++/make), python3, openssl"
+    exit 1
+fi
+
+info "System dependencies OK."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Install Node.js
+# ─────────────────────────────────────────────────────────────────────────────
+
 REQUIRED_NODE_MAJOR=24
 
 if ! command -v node &>/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d 'v')" -lt "$REQUIRED_NODE_MAJOR" ]]; then
     info "Installing Node.js ${REQUIRED_NODE_MAJOR}.x..."
-    if command -v apt-get &>/dev/null; then
+    if [[ "$PKG_MANAGER" == "apt" ]]; then
         curl -fsSL "https://deb.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x" | bash -
         apt-get install -y nodejs
-    elif command -v dnf &>/dev/null; then
+    elif [[ "$PKG_MANAGER" == "dnf" ]]; then
         curl -fsSL "https://rpm.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x" | bash -
         dnf install -y nodejs
-    elif command -v yum &>/dev/null; then
+    elif [[ "$PKG_MANAGER" == "yum" ]]; then
         curl -fsSL "https://rpm.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x" | bash -
         yum install -y nodejs
-    else
-        error "Unsupported package manager. Install Node.js ${REQUIRED_NODE_MAJOR}+ manually."
-        exit 1
     fi
 fi
 
@@ -62,6 +125,8 @@ if ! command -v npm &>/dev/null; then
     error "npm is not installed."
     exit 1
 fi
+
+info "Node.js $(node -v) OK."
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Create system user
@@ -92,18 +157,23 @@ npm run build
 
 # Copy built artefacts to install directory
 info "Copying built files..."
-cp -f "$SCRIPT_DIR/package.json" "$APP_DIR/"
-cp -rf "$SCRIPT_DIR/node_modules" "$APP_DIR/"
-cp -rf "$SCRIPT_DIR/shared/package.json" "$APP_DIR/shared/" 2>/dev/null || mkdir -p "$APP_DIR/shared"
-cp -rf "$SCRIPT_DIR/shared/dist" "$APP_DIR/shared/"
-cp -rf "$SCRIPT_DIR/server/package.json" "$APP_DIR/server/" 2>/dev/null || mkdir -p "$APP_DIR/server"
-cp -rf "$SCRIPT_DIR/server/dist" "$APP_DIR/server/"
-cp -rf "$SCRIPT_DIR/client/dist" "$APP_DIR/client/" 2>/dev/null || mkdir -p "$APP_DIR/client"
+mkdir -p "$APP_DIR"/{shared,server,client}
 
-# Prune dev dependencies from install dir
-info "Pruning dev dependencies..."
+cp -f "$SCRIPT_DIR/package.json" "$APP_DIR/"
+cp -f "$SCRIPT_DIR/package-lock.json" "$APP_DIR/" 2>/dev/null || true
+
+cp -f "$SCRIPT_DIR/shared/package.json" "$APP_DIR/shared/"
+cp -rf "$SCRIPT_DIR/shared/dist" "$APP_DIR/shared/"
+
+cp -f "$SCRIPT_DIR/server/package.json" "$APP_DIR/server/"
+cp -rf "$SCRIPT_DIR/server/dist" "$APP_DIR/server/"
+
+cp -rf "$SCRIPT_DIR/client/dist" "$APP_DIR/client/"
+
+# Install production dependencies in the install directory (preserves workspace hoisting)
+info "Installing production dependencies..."
 cd "$APP_DIR"
-npm prune --omit=dev 2>/dev/null || true
+npm ci --omit=dev
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data directory
