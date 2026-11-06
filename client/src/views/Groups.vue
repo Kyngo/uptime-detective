@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useApi } from '../composables/useApi.js';
+import MonitorSearch from '../components/MonitorSearch.vue';
 
 const api = useApi();
 const groups = ref<any[]>([]);
+const groupMonitors = ref<Record<number, any[]>>({});
 const loading = ref(true);
 const showForm = ref(false);
 const editingId = ref<number | null>(null);
@@ -14,8 +16,20 @@ async function fetchGroups() {
   loading.value = true;
   try {
     groups.value = await api.get('/api/v1/groups');
+    // Fetch monitors for each group
+    for (const group of groups.value) {
+      await fetchGroupMonitors(group.id);
+    }
   } catch (err: any) { error.value = err.message; }
   finally { loading.value = false; }
+}
+
+async function fetchGroupMonitors(groupId: number) {
+  try {
+    groupMonitors.value[groupId] = await api.get(`/api/v1/groups/${groupId}/monitors`);
+  } catch {
+    groupMonitors.value[groupId] = [];
+  }
 }
 
 function openCreate() {
@@ -47,6 +61,34 @@ async function deleteGroup(id: number) {
   if (!confirm('Delete this group? Monitors will become ungrouped.')) return;
   await api.del(`/api/v1/groups/${id}`);
   await fetchGroups();
+}
+
+async function onMonitorAdded(groupId: number) {
+  await fetchGroupMonitors(groupId);
+  // Update monitor count in the group list
+  const group = groups.value.find(g => g.id === groupId);
+  if (group) group.monitor_count = (groupMonitors.value[groupId] || []).length;
+}
+
+async function removeMonitor(groupId: number, monitorId: number) {
+  try {
+    await api.del(`/api/v1/groups/${groupId}/monitors/${monitorId}`);
+    await fetchGroupMonitors(groupId);
+    const group = groups.value.find(g => g.id === groupId);
+    if (group) group.monitor_count = (groupMonitors.value[groupId] || []).length;
+  } catch {}
+}
+
+function typeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    http: 'HTTP',
+    icmp: 'Ping',
+    dns: 'DNS',
+    tls: 'TLS',
+    tcp: 'TCP',
+    heartbeat: 'Heartbeat',
+  };
+  return labels[type] || type.toUpperCase();
 }
 
 onMounted(fetchGroups);
@@ -86,16 +128,44 @@ onMounted(fetchGroups);
       <p class="mb-2">No groups yet.</p>
       <p class="text-sm">Groups let you organize monitors and build status pages.</p>
     </div>
-    <div v-else class="grid gap-3">
-      <div v-for="group in groups" :key="group.id" class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 flex items-center justify-between">
-        <div>
-          <h3 class="font-medium text-gray-900 dark:text-white">{{ group.name }}</h3>
-          <p class="text-sm text-gray-500">{{ group.monitor_count }} monitor{{ group.monitor_count !== 1 ? 's' : '' }} · /{{ group.slug }}</p>
-          <p v-if="group.description" class="text-sm text-gray-400 mt-1">{{ group.description }}</p>
+    <div v-else class="grid gap-4">
+      <div v-for="group in groups" :key="group.id" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <!-- Group header -->
+        <div class="p-4 flex items-center justify-between">
+          <div>
+            <h3 class="font-medium text-gray-900 dark:text-white">{{ group.name }}</h3>
+            <p class="text-sm text-gray-500">{{ group.monitor_count }} monitor{{ group.monitor_count !== 1 ? 's' : '' }} · /{{ group.slug }}</p>
+            <p v-if="group.description" class="text-sm text-gray-400 mt-1">{{ group.description }}</p>
+          </div>
+          <div class="flex gap-2">
+            <button @click="openEdit(group)" class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Edit</button>
+            <button @click="deleteGroup(group.id)" class="px-3 py-1.5 text-xs border border-red-300 text-red-600 rounded hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20">Delete</button>
+          </div>
         </div>
-        <div class="flex gap-2">
-          <button @click="openEdit(group)" class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Edit</button>
-          <button @click="deleteGroup(group.id)" class="px-3 py-1.5 text-xs border border-red-300 text-red-600 rounded hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20">Delete</button>
+
+        <!-- Monitors in group -->
+        <div class="border-t border-gray-100 dark:border-gray-700 px-4 py-3 space-y-2">
+          <!-- Current monitors -->
+          <div v-if="groupMonitors[group.id]?.length" class="flex flex-wrap gap-2 mb-2">
+            <span
+              v-for="monitor in groupMonitors[group.id]"
+              :key="monitor.id"
+              class="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-xs"
+            >
+              <span class="truncate max-w-[150px]">{{ monitor.name }}</span>
+              <span class="text-[10px] text-gray-400 dark:text-gray-500">{{ typeLabel(monitor.type) }}</span>
+              <button
+                @click="removeMonitor(group.id, monitor.id)"
+                class="ml-0.5 p-0.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 hover:text-red-500 transition-colors"
+                title="Remove from group"
+              >
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </span>
+          </div>
+
+          <!-- Search input -->
+          <MonitorSearch :group-id="group.id" @added="onMonitorAdded(group.id)" />
         </div>
       </div>
     </div>

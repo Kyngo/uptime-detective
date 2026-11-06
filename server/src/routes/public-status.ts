@@ -1,19 +1,55 @@
 import { Router } from 'express';
+import jwt from 'jsonwebtoken';
 import { getDb } from '../db/connection.js';
 import type { MonitorStatus } from '@uptime-detective/shared';
 
 export const publicStatusRouter = Router();
 
+const JWT_SECRET = () => process.env.JWT_SECRET || 'dev-secret-change-me';
+
+/**
+ * Attempt to authenticate the request optionally.
+ * Returns true if a valid token is present, false otherwise.
+ * Does NOT reject unauthenticated requests — this is best-effort.
+ */
+function isAuthenticated(req: any): boolean {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return false;
+
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+
+  // Try JWT
+  try {
+    jwt.verify(token, JWT_SECRET());
+    return true;
+  } catch {
+    // Not a valid JWT — try API token
+  }
+
+  // Try API token lookup
+  const db = getDb();
+  const user = db.prepare('SELECT id FROM users WHERE api_token = ?').get(token);
+  return !!user;
+}
+
 /**
  * GET /api/v1/status/:slug
- * Public endpoint — no auth. Returns status page data with live monitor statuses.
+ * Public endpoint with optional auth.
+ * - Public pages (is_public=1) are served to everyone.
+ * - Private pages (is_public=0) are served only to authenticated users.
  */
 publicStatusRouter.get('/status/:slug', (req, res) => {
   const db = getDb();
   const { slug } = req.params;
 
-  const page = db.prepare('SELECT * FROM status_pages WHERE slug = ? AND is_public = 1').get(slug) as any;
+  const page = db.prepare('SELECT * FROM status_pages WHERE slug = ?').get(slug) as any;
   if (!page) { res.status(404).json({ error: 'Status page not found' }); return; }
+
+  // If the page is private, require authentication
+  if (!page.is_public && !isAuthenticated(req)) {
+    res.status(404).json({ error: 'Status page not found' });
+    return;
+  }
 
   // Get items with their associated data
   const items = db.prepare('SELECT * FROM status_page_items WHERE status_page_id = ? ORDER BY sort_order ASC').all(page.id) as any[];

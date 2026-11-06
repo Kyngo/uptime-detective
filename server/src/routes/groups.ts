@@ -96,3 +96,73 @@ groupsRouter.delete('/groups/:id', (req, res) => {
   db.prepare('DELETE FROM groups WHERE id = ?').run(id);
   res.json({ message: 'Group deleted' });
 });
+
+// GET /api/v1/groups/:id/monitors — list monitors in this group
+groupsRouter.get('/groups/:id/monitors', (req, res) => {
+  const db = getDb();
+  const id = Number(req.params.id);
+  const existing = db.prepare('SELECT id FROM groups WHERE id = ?').get(id);
+  if (!existing) { res.status(404).json({ error: 'Group not found' }); return; }
+
+  const monitors = db.prepare('SELECT id, name, type, target FROM monitors WHERE group_id = ? ORDER BY name ASC').all(id);
+  res.json(monitors);
+});
+
+// GET /api/v1/groups/available-monitors — monitors not assigned to any group (or search all)
+groupsRouter.get('/available-monitors', (req, res) => {
+  const db = getDb();
+  const search = (req.query.search as string || '').trim();
+  const excludeGroup = req.query.exclude_group ? Number(req.query.exclude_group) : null;
+
+  let query = 'SELECT id, name, type, target, group_id FROM monitors WHERE 1=1';
+  const params: any[] = [];
+
+  if (search) {
+    query += ' AND name LIKE ?';
+    params.push(`%${search}%`);
+  }
+
+  if (excludeGroup) {
+    query += ' AND (group_id IS NULL OR group_id != ?)';
+    params.push(excludeGroup);
+  } else {
+    query += ' AND group_id IS NULL';
+  }
+
+  query += ' ORDER BY name ASC LIMIT 20';
+
+  const monitors = db.prepare(query).all(...params);
+  res.json(monitors);
+});
+
+// POST /api/v1/groups/:id/monitors — add a monitor to this group
+groupsRouter.post('/groups/:id/monitors', (req, res) => {
+  const db = getDb();
+  const groupId = Number(req.params.id);
+  const { monitor_id } = req.body;
+
+  if (!monitor_id) { res.status(400).json({ error: 'monitor_id is required' }); return; }
+
+  const group = db.prepare('SELECT id FROM groups WHERE id = ?').get(groupId);
+  if (!group) { res.status(404).json({ error: 'Group not found' }); return; }
+
+  const monitor = db.prepare('SELECT id FROM monitors WHERE id = ?').get(Number(monitor_id));
+  if (!monitor) { res.status(404).json({ error: 'Monitor not found' }); return; }
+
+  db.prepare('UPDATE monitors SET group_id = ?, updated_at = datetime(\'now\') WHERE id = ?').run(groupId, Number(monitor_id));
+  res.json({ message: 'Monitor added to group' });
+});
+
+// DELETE /api/v1/groups/:id/monitors/:monitorId — remove a monitor from this group
+groupsRouter.delete('/groups/:id/monitors/:monitorId', (req, res) => {
+  const db = getDb();
+  const groupId = Number(req.params.id);
+  const monitorId = Number(req.params.monitorId);
+
+  const monitor = db.prepare('SELECT id, group_id FROM monitors WHERE id = ?').get(monitorId) as any;
+  if (!monitor) { res.status(404).json({ error: 'Monitor not found' }); return; }
+  if (monitor.group_id !== groupId) { res.status(400).json({ error: 'Monitor is not in this group' }); return; }
+
+  db.prepare('UPDATE monitors SET group_id = NULL, updated_at = datetime(\'now\') WHERE id = ?').run(monitorId);
+  res.json({ message: 'Monitor removed from group' });
+});

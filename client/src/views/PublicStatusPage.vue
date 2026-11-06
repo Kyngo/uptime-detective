@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { useAuthStore } from '../stores/auth.js';
 import UptimeBar from '../components/UptimeBar.vue';
 
 const route = useRoute();
+const auth = useAuthStore();
 const data = ref<any>(null);
 const loading = ref(true);
 const error = ref('');
@@ -33,7 +35,11 @@ const overallColor = computed(() => {
 onMounted(async () => {
   try {
     const slug = route.params.slug as string;
-    const resp = await fetch(`/api/v1/status/${slug}`);
+    const headers: Record<string, string> = {};
+    if (auth.token) {
+      headers['Authorization'] = `Bearer ${auth.token}`;
+    }
+    const resp = await fetch(`/api/v1/status/${slug}`, { headers });
     if (!resp.ok) throw new Error('Status page not found');
     data.value = await resp.json();
   } catch (err: any) { error.value = err.message; }
