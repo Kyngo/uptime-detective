@@ -10,7 +10,7 @@ Uptime Detective supports five notification channel types:
 | **Email** | Recipient address (SMTP configured via env vars) |
 | **Slack** | Incoming webhook URL |
 | **Discord** | Webhook URL |
-| **Telegram** | Bot token + chat ID |
+| **Telegram** | Chat ID (the bot token is configured once instance-wide) |
 
 ## Channel Setup
 
@@ -81,16 +81,26 @@ Uses Discord webhook with rich embeds (color, fields, timestamp, footer).
 
 Uses Telegram Bot API with MarkdownV2 formatting.
 
+Uptime Detective runs **one global Telegram bot** per instance. Configure its token once in **Settings → Telegram Bot** (or with `TELEGRAM_BOT_TOKEN`); notification channels only need the destination chat ID.
+
 ```json
 {
   "name": "Admin Bot",
   "type": "telegram",
   "config": {
-    "bot_token": "123456:ABC-DEF...",
     "chat_id": "-1001234567890"
   }
 }
 ```
+
+- `chat_id` — Telegram chat, group or channel ID the bot posts to. The bot must be a member of that chat.
+- `message_thread_id` — optional; target a specific topic in a forum group.
+- The global bot token is used for every `telegram` channel; it is never stored in the channel config.
+- A bot token must be configured (environment or Settings → Telegram Bot); otherwise sending fails with “Telegram bot is not configured”. The enable flag (`telegram_bot_enabled` / `TELEGRAM_BOT_ENABLED`) only controls chat control (long polling and commands), not notifications: with a token present, alerts are still delivered even when the bot is disabled for commands.
+- When `APP_URL` is set, each notification includes a link to `APP_URL/monitors/:id`.
+- **Mutes suppress notifications.** A monitor muted with `/mute` (or a global mute) does not send notifications while the mute is active, even though checks keep running.
+
+Legacy configuration: an old channel config that still contains a `bot_token` keeps working only while no global token is configured, and logs a deprecation warning. The database migration copies the first legacy token into the instance settings. Re-save old channels so only `chat_id` remains, and see [Telegram Bot](./telegram.md) for the full bot setup.
 
 ## When Notifications Fire
 
@@ -126,6 +136,9 @@ Channels marked as `is_default: true` fire for monitors that have **no explicitl
 - Each channel is dispatched independently — one channel failing doesn't prevent others
 - Errors are logged but don't affect pipeline execution
 - Test notifications can be sent via `POST /api/v1/notifications/:id/test`
+- Notifications are suppressed while a monitor is muted (`/mute` in the bot, per monitor or globally) — checks still run
+- Notifications are suppressed during maintenance windows (see below)
+- The single global Telegram bot token sends both notifications and bot-control replies; see [Telegram Bot](./telegram.md)
 
 ---
 

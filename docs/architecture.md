@@ -17,20 +17,27 @@ graph LR
     subgraph Client
         A[Vue 3 SPA<br/>Dashboard]
         B[Public Status<br/>Pages]
+        W[Telegram Mini App<br/>same SPA in WebView]
     end
 
     subgraph Server["Express.js API"]
         C[Scheduler<br/>node-cron]
         D[Check Engine<br/>HTTP / ICMP / DNS / TLS / TCP]
         E[Notifiers<br/>Webhook / Email / Slack / Discord / Telegram]
+        G[Telegram Bot<br/>long polling + commands]
         F[(SQLite<br/>WAL mode)]
         C --> D
         D --> F
         D --> E
+        G --> F
+        G --> D
     end
 
     A <-->|WebSocket + REST| Server
     B -->|REST| Server
+    W -->|REST| Server
+    G <-->|Bot API| T[Telegram]
+    T -->|Mini App initData| W
 ```
 
 ## Tech Stack
@@ -44,6 +51,7 @@ graph LR
 | Auth | JWT + API tokens (bcrypt password hashing) |
 | Security | Helmet, express-rate-limit, CORS, CSP headers |
 | Notifications | nodemailer (SMTP), native HTTP (webhooks, Slack, Discord, Telegram) |
+| Telegram Bot | Native `fetch` against the Telegram Bot API, long polling (no webhook) |
 | Container | Node 22 Alpine, multi-stage build, non-root user |
 
 ## Check Engine
@@ -63,8 +71,11 @@ flowchart TD
     D --> H{Status changed?}
     G --> H
     H -->|Yes| I[Create/resolve incident]
-    I --> J[Fire notifications]
+    I --> M{Maintenance window<br/>or monitor muted?}
+    M -->|Yes| N[Suppress notification]
+    M -->|No| J[Fire notifications]
     J --> K[Emit Socket.IO event]
+    N --> K
     H -->|No| K
 ```
 
@@ -90,6 +101,32 @@ Status codes in the database:
 - Jobs auto-start on server boot for all active monitors
 - Creating/updating/deleting monitors dynamically adds/removes jobs
 - Graceful shutdown stops all jobs before closing the process
+
+## Telegram Bot
+
+The bot runs in-process with the API server and uses Telegram's **long-polling** mode (no public webhook required):
+
+```mermaid
+flowchart LR
+    A[Bot controller<br/>getUpdates long poll] --> B[Allow-list gate]
+    B -->|allowed| C[Command handlers<br/>/status /add /mute ...]
+    B -->|not allowed| D[Reply with user ID]
+    C --> E[Monitor service<br/>same CRUD as HTTP API]
+    C --> F[Mutes service]
+    C --> G[Check engine<br/>/ping /restart]
+    E --> H[(SQLite)]
+    F --> H
+    I[Mini App auth<br/>initData HMAC + JWT] --> H
+```
+
+- **Config** — one global bot token (`TELEGRAM_BOT_TOKEN` env or the `settings` table). The token is resolved in one place, never returned by the API and never logged.
+- **Runtime** — a singleton controller starts after the database and scheduler are ready, registers the command list and (when a Mini App URL is configured) the chat menu button, then polls `getUpdates` with an in-memory offset. Errors back off (`1s → 2s → 5s → 10s → 30s`); a `409` conflict triggers one `deleteWebhook` and retry. Shutdown aborts the in-flight poll.
+- **Allow list** — every message and callback is gated. Unknown users are tracked (`telegram_users`) but get only their own ID; allowed users are effectively admins.
+- **Commands** — dispatcher handles messages and inline callbacks, with short-lived in-memory state for wizards and confirmations. Mutations call the same `monitor-service` as the REST API, so side effects (scheduler jobs, Socket.IO events) are identical.
+- **Notifications** — the dispatcher checks maintenance windows and active mutes before dispatch; a `telegram` channel only stores a `chat_id` and uses the global token.
+- **Mini App** — a public `POST /api/v1/telegram/webapp/auth` endpoint validates `initData` with an HMAC of the bot token and issues a normal JWT for a shadow local user, gated by the same allow list.
+
+See [Telegram Bot](./telegram.md) for setup and the full command reference.
 
 ## Real-time Updates
 

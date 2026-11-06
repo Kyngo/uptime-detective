@@ -216,9 +216,164 @@ Slugs are auto-generated from the name. Duplicates get a numeric suffix.
 // Discord
 { "name": "Alerts", "type": "discord", "config": { "webhook_url": "https://discord.com/api/webhooks/..." } }
 
-// Telegram
-{ "name": "Bot Alert", "type": "telegram", "config": { "bot_token": "123:ABC...", "chat_id": "-100123" } }
+// Telegram (bot token is instance-wide, configured in /telegram/config)
+{ "name": "Bot Alert", "type": "telegram", "config": { "chat_id": "-100123" } }
 ```
+
+---
+
+## Telegram Bot
+
+The bot is configured instance-wide. Mutation endpoints require the `admin` role; read endpoints require authentication. See [Telegram Bot](./telegram.md) for setup and command reference.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/telegram/config` | Yes | Current bot configuration and runtime status (never the full token) |
+| PUT | `/telegram/config` | Admin | Save token / enabled state / Mini App URL and restart the bot |
+| POST | `/telegram/restart` | Admin | Restart the bot and return its status |
+| POST | `/telegram/test` | Admin | Send a test message through the global bot |
+| GET | `/telegram/users` | Yes | List Telegram users known to the bot (allowed and pending) |
+| POST | `/telegram/users` | Admin | Add/allow a Telegram user by numeric ID |
+| PUT | `/telegram/users/:id` | Admin | Allow or deny a known Telegram user |
+| DELETE | `/telegram/users/:id` | Admin | Deny a user (the row is kept, the user can be allowed again) |
+| POST | `/telegram/webapp/auth` | **No** (signature) | Exchange Telegram Mini App `initData` for a JWT |
+
+### GET /telegram/config
+
+```json
+{
+  "enabled": true,
+  "bot_token_set": true,
+  "bot_token_hint": "12345678…:…wxyz",
+  "bot_username": "acme_uptime_bot",
+  "webapp_url": "https://status.example.com",
+  "api_base_url": "https://api.telegram.org",
+  "token_source": "settings",
+  "status": {
+    "configured": true,
+    "enabled": true,
+    "running": true,
+    "bot_username": "acme_uptime_bot",
+    "started_at": "2026-11-06T09:58:12.000Z",
+    "last_error": null,
+    "updates_processed": 42,
+    "token_source": "settings"
+  }
+}
+```
+
+`token_source` is `env` when `TELEGRAM_BOT_TOKEN` is set, `settings` when the token is saved in the database, `none` otherwise. The token itself is never returned — only `bot_token_hint`.
+
+### PUT /telegram/config
+
+```json
+// Request — every field optional
+{
+  "enabled": true,
+  "bot_token": "123456789:AAH4k...",
+  "webapp_url": "https://status.example.com"
+}
+```
+
+Before saving, the server validates a new `bot_token` with Telegram `getMe` and rejects an invalid token (`400`). Sending `null` (or an empty string) clears the database token. When the token comes from the environment, changing or clearing it returns `400`. `webapp_url` must be a valid `https://` URL. Saving restarts the bot. Returns the same shape as `GET /telegram/config`.
+
+### POST /telegram/restart
+
+Restarts the long-polling bot and returns the runtime status:
+
+```json
+{
+  "configured": true,
+  "enabled": true,
+  "running": true,
+  "bot_username": "acme_uptime_bot",
+  "started_at": "2026-11-06T10:00:00.000Z",
+  "last_error": null,
+  "updates_processed": 42,
+  "token_source": "settings"
+}
+```
+
+### POST /telegram/test
+
+```json
+// Request — chat_id optional; defaults to the first allowed user with a known chat
+{ "chat_id": "-1001234567890" }
+
+// Response 200
+{ "message": "Test message sent to chat -1001234567890", "chat_id": "-1001234567890", "message_id": 42 }
+```
+
+Returns `400` when the bot is not configured or no allowed user with a chat is known; `502` when Telegram rejects the send.
+
+### GET /telegram/users
+
+```json
+[
+  {
+    "telegram_user_id": 123456789,
+    "chat_id": 123456789,
+    "username": "alice_alerts",
+    "first_name": "Alice",
+    "last_name": null,
+    "is_allowed": true,
+    "allowed_by": 1,
+    "last_seen_at": "2026-11-06T09:55:00.000Z",
+    "created_at": "2026-11-05T18:00:00.000Z",
+    "updated_at": "2026-11-06T09:55:00.000Z"
+  }
+]
+```
+
+Users that contacted the bot but are not allowed are listed with `is_allowed: false` (pending in the UI). `chat_id` is recorded only for private chats.
+
+### POST /telegram/users
+
+```json
+// Request
+{ "telegram_user_id": 123456789, "username": "alice_alerts", "is_allowed": true }
+
+// Response 200 — the upserted record
+{ "telegram_user_id": 123456789, "username": "alice_alerts", "is_allowed": true, ... }
+```
+
+`is_allowed: false` pre-denies the user in the same upsert. Returns `400` when `telegram_user_id` is not a positive integer.
+
+### PUT /telegram/users/:id
+
+```json
+// Request
+{ "is_allowed": false }
+
+// Response 200 — updated record; 404 if the user is unknown
+```
+
+### DELETE /telegram/users/:id
+
+Sets `is_allowed = 0`. The record is kept so the user can be allowed again.
+
+```json
+// Response 200
+{ "message": "Telegram user denied", "user": { "telegram_user_id": 123456789, "is_allowed": false, ... } }
+```
+
+### POST /telegram/webapp/auth
+
+**Public endpoint** (no `Authorization` header). Validates the Telegram Mini App `initData` HMAC signature with the bot token, checks `auth_date` freshness and the allow list, then issues a normal JWT.
+
+```json
+// Request
+{ "init_data": "query_id=AAH...&user=%7B%22id%22%3A123...&auth_date=1762345000&hash=..." }
+
+// Response 200
+{
+  "token": "eyJ...",
+  "user": { "id": 7, "username": "tg_123456789", "role": "admin" },
+  "telegram_user": { "id": 123456789, "username": "alice_alerts" }
+}
+```
+
+Errors: `400` missing or malformed `init_data` (missing `init_data`, malformed query string, missing `hash`, `auth_date` or `user`, invalid user payload or user ID); `401` invalid signature, expired or future `auth_date`; `403` Telegram user not allowed; `503` bot not configured. Rate-limited to 20 requests per minute per IP.
 
 ---
 
@@ -257,6 +412,7 @@ Slugs are auto-generated from the name. Duplicates get a numeric suffix.
 | GET | `/health` | Health check |
 | GET | `/setup/status` | Check if initial setup is needed |
 | POST | `/setup/complete` | Complete initial setup (first-run only) |
+| POST | `/telegram/webapp/auth` | Telegram Mini App login (signature-authenticated, see [above](#post-telegramwebappauth)) |
 
 ### GET /status/:slug
 

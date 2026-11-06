@@ -135,3 +135,5 @@ Newly created heartbeat monitors have a grace period — they won't be marked DO
 - `POST /api/v1/monitors/:id/resume` — Restarts the scheduler job, sets `active = true`
 
 Paused monitors retain their last known status but no new checks are performed.
+
+The Telegram bot exposes the same operations: `/pause <ref>` and `/resume <ref>` (see [Telegram Bot](./telegram.md#commands)). Muting alert notifications (`/mute`) is a separate action: checks keep running while a monitor is muted.

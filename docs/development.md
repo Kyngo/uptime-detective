@@ -73,9 +73,21 @@ uptime-detective/
 │       │   ├── maintenance.ts  # Maintenance window management
 │       │   ├── status-pages.ts # Status page builder
 │       │   ├── public-status.ts# Public status page data
+│       │   ├── telegram.ts     # Telegram bot settings, allow list, Mini App auth
 │       │   └── setup.ts        # First-run setup wizard
 │       └── services/
 │           ├── scheduler.ts    # node-cron job management
+│           ├── monitor-service.ts # Shared monitor CRUD (HTTP API + bot)
+│           ├── mutes.ts        # Notification mutes (per monitor / global)
+│           ├── telegram/       # Single-bot Telegram integration
+│           │   ├── config.ts   # Token/settings resolution
+│           │   ├── api.ts      # Bot API client (fetch)
+│           │   ├── bot.ts      # Long-polling controller
+│           │   ├── webapp.ts   # Mini App initData HMAC auth
+│           │   ├── allowlist.ts# User allow list
+│           │   ├── format.ts   # Message formatting helpers
+│           │   ├── types.ts    # Bot API types
+│           │   └── commands/   # Chat command handlers + dispatcher
 │           ├── checker/        # Monitor type implementations
 │           │   ├── shared.ts   # Common check logic (status transitions, notifications)
 │           │   ├── http.ts
@@ -95,6 +107,7 @@ uptime-detective/
 │   └── src/
 │       ├── App.vue             # Root layout (sidebar + router-view)
 │       ├── main.ts             # Vue app bootstrap
+│       ├── telegram-webapp.ts  # Telegram Mini App auto-login bootstrap
 │       ├── router/index.ts     # Route definitions + auth/setup guards
 │       ├── stores/auth.ts      # Pinia auth store
 │       ├── composables/
@@ -112,6 +125,7 @@ uptime-detective/
 │           ├── StatusPages.vue
 │           ├── PublicStatusPage.vue
 │           ├── Notifications.vue
+│           ├── Telegram.vue    # Telegram bot settings + allow list
 │           ├── Maintenance.vue
 │           ├── Settings.vue
 │           ├── Login.vue

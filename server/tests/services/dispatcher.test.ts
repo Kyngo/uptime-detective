@@ -8,6 +8,10 @@ const mockAll = vi.fn();
 vi.mock('../../src/db/connection.js', () => ({
   getDb: vi.fn(() => ({ prepare: vi.fn(() => ({ get: mockGet, all: mockAll })) })),
 }));
+const mutesMock = vi.hoisted(() => ({ isMonitorMuted: vi.fn(() => false) }));
+vi.mock('../../src/services/mutes.js', () => ({
+  isMonitorMuted: mutesMock.isMonitorMuted,
+}));
 vi.mock('../../src/services/notifiers/webhook.js', () => ({ sendWebhook: vi.fn(async () => {}) }));
 vi.mock('../../src/services/notifiers/email.js', () => ({ sendEmail: vi.fn(async () => {}) }));
 vi.mock('../../src/services/notifiers/slack.js', () => ({ sendSlack: vi.fn(async () => {}) }));
@@ -36,7 +40,10 @@ const payload: NotificationPayload = {
 };
 
 describe('Notification Dispatcher', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mutesMock.isMonitorMuted.mockReturnValue(false);
+  });
 
   describe('isInMaintenance', () => {
     it('returns true when in maintenance', () => {
@@ -53,6 +60,14 @@ describe('Notification Dispatcher', () => {
     it('suppresses during maintenance', async () => {
       mockGet.mockReturnValue({ id: 1 });
       await dispatchNotifications(monitor, payload);
+      expect(sendWebhook).not.toHaveBeenCalled();
+    });
+
+    it('suppresses while the monitor is muted', async () => {
+      mockGet.mockReturnValueOnce(undefined);
+      mutesMock.isMonitorMuted.mockReturnValue(true);
+      await dispatchNotifications(monitor, payload);
+      expect(mutesMock.isMonitorMuted).toHaveBeenCalledWith(monitor.id);
       expect(sendWebhook).not.toHaveBeenCalled();
     });
 

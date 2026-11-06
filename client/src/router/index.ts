@@ -85,6 +85,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/telegram',
+    name: 'telegram',
+    component: () => import('../views/Telegram.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/maintenance',
     name: 'maintenance',
     component: () => import('../views/Maintenance.vue'),

@@ -41,9 +41,9 @@ openssl rand -base64 32
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ALLOW_PRIVATE_IPS` | `true` | Allow monitoring private/internal IPs (192.168.x, 10.x, 172.16.x) |
+| `ALLOW_PRIVATE_IPS` | `false` | Allow checking private/internal IPs (192.168.x, 10.x, 172.16.x) from HTTP monitors and from the bot's `/ping` command |
 
-Set to `false` in multi-tenant environments to prevent SSRF-style abuse.
+When unset (default) or `false`, HTTP checks and bot `/ping` targets that resolve to loopback, private, link-local or cloud-metadata addresses are refused (SSRF protection). Set `ALLOW_PRIVATE_IPS=true` for self-hosted instances that monitor internal services (the sample `.env.example` enables it).
 
 ### Email (SMTP)
 
@@ -56,6 +56,29 @@ Required only if you use email notification channels.
 | `SMTP_USER` | — | SMTP username |
 | `SMTP_PASS` | — | SMTP password |
 | `SMTP_FROM` | — | Sender email address (e.g. `alerts@example.com`) |
+
+### Telegram Bot
+
+The Telegram bot is optional. Every variable below can also be set from the web UI (**Settings → Telegram Bot**); environment variables take precedence.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TELEGRAM_BOT_TOKEN` | — | Bot token from [@BotFather](https://t.me/BotFather). Overrides the token saved in the database; while set, the API cannot change or clear the token. A configured token is also what notification channels need. |
+| `TELEGRAM_BOT_ENABLED` | `true` | Set to `false` (or `0`) to disable chat control: the long-polling bot does not start and commands are not handled. Notifications still work as long as a bot token is configured — the enable flag only controls polling. |
+| `TELEGRAM_ADMIN_USER_IDS` | — | Comma-separated Telegram user IDs to allow automatically when the server starts (bootstrap allow list). |
+| `TELEGRAM_API_BASE_URL` | `https://api.telegram.org` | Telegram Bot API base URL. Only change this for tests or a self-hosted Bot API server. |
+| `TELEGRAM_WEBAPP_URL` | — | Public HTTPS URL of this instance for the [Telegram Mini App](./telegram.md#telegram-mini-app). Must use `https://` (validated). Wins over the web UI setting. |
+| `TELEGRAM_WEBAPP_AUTH_MAX_AGE` | `86400` | Maximum age in seconds of Mini App `initData` (default 24 hours). |
+| `APP_URL` | — | Public base URL of the instance (e.g. `https://status.example.com`). Used for monitor links in Telegram notifications and to make heartbeat URLs absolute in the bot's `/info` reply. |
+
+```bash
+# Example: bot token from the environment, first admin bootstrapped
+TELEGRAM_BOT_TOKEN=123456789:AAH4k...
+TELEGRAM_ADMIN_USER_IDS=123456789
+APP_URL=https://status.example.com
+```
+
+See [Telegram Bot](./telegram.md) for setup, commands, the Mini App and troubleshooting.
 
 ## Security Settings
 
@@ -107,6 +130,13 @@ environment:
   - SMTP_USER=${SMTP_USER:-}
   - SMTP_PASS=${SMTP_PASS:-}
   - SMTP_FROM=${SMTP_FROM:-}
+  - APP_URL=${APP_URL:-}
+  - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+  - TELEGRAM_BOT_ENABLED=${TELEGRAM_BOT_ENABLED:-true}
+  - TELEGRAM_ADMIN_USER_IDS=${TELEGRAM_ADMIN_USER_IDS:-}
+  - TELEGRAM_API_BASE_URL=${TELEGRAM_API_BASE_URL:-https://api.telegram.org}
+  - TELEGRAM_WEBAPP_URL=${TELEGRAM_WEBAPP_URL:-}
+  - TELEGRAM_WEBAPP_AUTH_MAX_AGE=${TELEGRAM_WEBAPP_AUTH_MAX_AGE:-86400}
 ```
 
 Variables with `${VAR:-default}` syntax pull from the host environment or use the default. Set them in a `.env` file alongside `docker-compose.yml` or export them in your shell.

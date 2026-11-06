@@ -27,10 +27,14 @@ export function useApi() {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(error.error || `HTTP ${response.status}`);
+      // Some endpoints (e.g. Telegram) answer errors with { message }.
+      throw new Error(error.error || error.message || `HTTP ${response.status}`);
     }
 
-    return response.json();
+    // Tolerate empty/204 responses from endpoints that return no body.
+    if (response.status === 204) return undefined as T;
+    const text = await response.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   return {

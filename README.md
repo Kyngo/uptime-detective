@@ -15,6 +15,7 @@ A self-hosted uptime monitoring system built with Vue 3 and Express.js. Monitor 
 - **Incident Tracking** — Auto-created on downtime, auto-resolved on recovery
 - **Public Status Pages** — Customizable pages with 90-day uptime bars
 - **Notifications** — Webhook, Email (SMTP), Slack, Discord, Telegram
+- **Telegram Bot Control** — Two-way bot: status, add/edit/remove/pause/resume monitors, mutes, allow list, and the dashboard as a Telegram Mini App
 - **Maintenance Windows** — Suppress alerts during planned downtime
 - **Dark Mode** — System preference detection + manual toggle
 - **REST API** — Token-authenticated CRUD for all resources
@@ -33,6 +34,8 @@ npm run dev
 ```
 
 Open http://localhost:5173 — the setup wizard will guide you through creating your admin account.
+
+Optional: control the instance from Telegram by adding a bot token in **Settings → Telegram Bot** (or `TELEGRAM_BOT_TOKEN`). See [Telegram Bot](docs/telegram.md).
 
 ### Docker (Production)
 
@@ -73,6 +76,7 @@ graph LR
 | [API Reference](docs/api.md) | Full REST API documentation with examples |
 | [Monitors](docs/monitors.md) | Monitor types, configuration, heartbeat usage |
 | [Notifications](docs/notifications.md) | Notification channels, triggers, maintenance windows |
+| [Telegram Bot](docs/telegram.md) | Bot setup, commands, allow list, mutes, Mini App |
 | [Configuration](docs/configuration.md) | Environment variables, security settings |
 | [Deployment](docs/deployment.md) | Docker, reverse proxy, systemd, backups |
 | [Development](docs/development.md) | Local setup, project structure, scripts |

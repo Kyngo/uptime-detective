@@ -4,6 +4,7 @@ import { sendEmail } from './email.js';
 import { sendSlack } from './slack.js';
 import { sendDiscord } from './discord.js';
 import { sendTelegram } from './telegram.js';
+import { isMonitorMuted } from '../mutes.js';
 import type { Monitor, NotificationType } from '@uptime-detective/shared';
 
 export interface NotificationPayload {
@@ -36,12 +37,18 @@ export function isInMaintenance(monitorId: number): boolean {
 
 /**
  * Dispatch notifications for a monitor event.
- * Respects maintenance windows (suppresses notifications during maintenance).
+ * Respects maintenance windows and user-configured mutes (both suppress delivery).
  */
 export async function dispatchNotifications(monitor: Monitor, payload: NotificationPayload): Promise<void> {
   // Suppress during maintenance
   if (isInMaintenance(monitor.id)) {
     console.log(`[notify] Suppressed for monitor ${monitor.id} (in maintenance)`);
+    return;
+  }
+
+  // Suppress while muted (per-monitor or global mute)
+  if (isMonitorMuted(monitor.id)) {
+    console.log(`[notify] Suppressed for monitor ${monitor.id} (muted)`);
     return;
   }
 

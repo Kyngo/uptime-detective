@@ -1,6 +1,14 @@
 import { getDb } from './connection.js';
 
-const MIGRATIONS = [
+interface Migration {
+  version: number;
+  name: string;
+  sql: string;
+  /** Optional data migration executed in the same transaction as `sql`. */
+  run?: (db: any) => void;
+}
+
+const MIGRATIONS: Migration[] = [
   {
     version: 1,
     name: 'initial_schema',
@@ -139,6 +147,77 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    version: 3,
+    name: 'telegram_bot_and_mutes',
+    sql: `
+      CREATE TABLE IF NOT EXISTS telegram_users (
+        telegram_user_id INTEGER PRIMARY KEY,
+        chat_id INTEGER,
+        username TEXT,
+        first_name TEXT,
+        last_name TEXT,
+        is_allowed INTEGER NOT NULL DEFAULT 0,
+        allowed_by INTEGER,
+        last_seen_at DATETIME,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_telegram_users_allowed ON telegram_users(is_allowed);
+
+      CREATE TABLE IF NOT EXISTS monitor_mutes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        monitor_id INTEGER REFERENCES monitors(id) ON DELETE CASCADE,
+        muted_until DATETIME NOT NULL,
+        muted_by TEXT,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_monitor_mutes_monitor ON monitor_mutes(monitor_id);
+      CREATE INDEX IF NOT EXISTS idx_monitor_mutes_until ON monitor_mutes(muted_until);
+    `,
+    run: (db) => {
+      // Single-bot migration: import the first legacy Telegram notification
+      // channel token into instance settings and drop it from the channel
+      // config (the channel only keeps its chat_id).
+      try {
+        const existing = db
+          .prepare("SELECT value FROM settings WHERE key = 'telegram_bot_token'")
+          .get() as { value: string } | undefined;
+        if (existing?.value) return;
+
+        const channels = db
+          .prepare("SELECT id, config FROM notifications WHERE type = 'telegram'")
+          .all() as { id: number; config: string }[];
+
+        for (const channel of channels) {
+          try {
+            const config = typeof channel.config === 'string' ? JSON.parse(channel.config) : channel.config;
+            if (!config || typeof config !== 'object' || !config.bot_token) continue;
+
+            db.prepare(
+              `INSERT INTO settings (key, value, updated_at) VALUES ('telegram_bot_token', ?, datetime('now'))
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
+            ).run(String(config.bot_token));
+
+            const { bot_token: _importedToken, ...rest } = config;
+            db.prepare('UPDATE notifications SET config = ? WHERE id = ?').run(JSON.stringify(rest), channel.id);
+
+            db.prepare(
+              `INSERT INTO settings (key, value, updated_at) VALUES ('telegram_bot_enabled', '1', datetime('now'))
+               ON CONFLICT(key) DO NOTHING`
+            ).run();
+
+            console.log(`[db] Imported legacy Telegram bot token into instance settings (channel #${channel.id})`);
+            break;
+          } catch (err: any) {
+            console.warn(`[db] Skipped malformed Telegram channel #${channel.id}: ${err.message}`);
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[db] Legacy Telegram bot token import skipped: ${err.message}`);
+      }
+    },
+  },
 ];
 
 export function migrate(): void {
@@ -167,8 +246,11 @@ export function migrate(): void {
     return;
   }
 
-  const applyMigration = db.transaction((migration: (typeof MIGRATIONS)[0]) => {
+  const applyMigration = db.transaction((migration: Migration) => {
     db.exec(migration.sql);
+    if (migration.run) {
+      migration.run(db);
+    }
     db.prepare('INSERT INTO _migrations (version, name) VALUES (?, ?)').run(
       migration.version,
       migration.name

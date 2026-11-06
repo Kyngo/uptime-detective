@@ -1,5 +1,20 @@
 # Changelog
 
+## Telegram Bot Control (2026-11-06)
+
+### Added
+- **Two-way Telegram bot** — one instance-wide bot token, long-polling only; commands `/status`, `/info`, `/add`, `/edit`, `/remove`, `/mute`, `/unmute`, `/pause`, `/resume`, `/restart`, `/ping`, `/allow`, `/deny`, `/users`, `/groups`, `/whoami`, `/app`, `/help`, `/start`, `/cancel`
+- **Allow list** — unknown users receive their Telegram ID; admins allow/deny via the bot or the new Settings → Telegram Bot page; `TELEGRAM_ADMIN_USER_IDS` bootstraps the first admins
+- **Alert mutes** — per-monitor or global, with durations (`/mute 12 2h`); notifications are suppressed while checks keep running
+- **Telegram Mini App** — the dashboard opens inside Telegram as a web app; public `initData` HMAC auth endpoint auto-logs in allowed users
+- **Telegram API** — `/api/v1/telegram/config`, `/restart`, `/test`, `/users`, and the public `/webapp/auth` endpoint
+- **Documentation** — [docs/telegram.md](docs/telegram.md) bot guide incl. Mini App setup and troubleshooting
+
+### Changed
+- `telegram` notification channels now use the single global bot token and only store `chat_id`; legacy `bot_token` values are migrated into settings on upgrade (migration v3)
+- Notification dispatch is suppressed for muted monitors, after the existing maintenance-window check
+- New database tables `telegram_users` and `monitor_mutes`
+
 ## v0.1.0 — Initial Build (2026-07-16)
 
 Complete implementation of Uptime Detective across 4 development phases in a single session.

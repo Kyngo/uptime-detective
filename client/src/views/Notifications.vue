@@ -17,7 +17,7 @@ const configFields = computed(() => {
     case 'email': return [{ key: 'to', label: 'To Email', placeholder: 'alerts@example.com' }];
     case 'slack': return [{ key: 'webhook_url', label: 'Slack Webhook URL', placeholder: 'https://hooks.slack.com/...' }];
     case 'discord': return [{ key: 'webhook_url', label: 'Discord Webhook URL', placeholder: 'https://discord.com/api/webhooks/...' }];
-    case 'telegram': return [{ key: 'bot_token', label: 'Bot Token', placeholder: '123456:ABC-DEF...' }, { key: 'chat_id', label: 'Chat ID', placeholder: '-1001234567890' }];
+    case 'telegram': return [{ key: 'chat_id', label: 'Chat ID', placeholder: '-1001234567890' }];
     default: return [];
   }
 });
@@ -36,16 +36,25 @@ function openCreate() {
 
 function openEdit(ch: any) {
   editingId.value = ch.id;
-  form.value = { name: ch.name, type: ch.type, config: { ...ch.config }, is_default: Boolean(ch.is_default) };
+  // Telegram channels only store the chat ID; the bot token is global.
+  const config = ch.type === 'telegram'
+    ? { chat_id: ch.config?.chat_id }
+    : { ...ch.config };
+  form.value = { name: ch.name, type: ch.type, config, is_default: Boolean(ch.is_default) };
   showForm.value = true;
 }
 
 async function submit() {
   try {
+    // Keep only the chat ID for Telegram channels — the bot token is configured
+    // once in Settings → Telegram Bot.
+    const payload = form.value.type === 'telegram'
+      ? { ...form.value, config: { chat_id: form.value.config.chat_id } }
+      : form.value;
     if (editingId.value) {
-      await api.put(`/api/v1/notifications/${editingId.value}`, form.value);
+      await api.put(`/api/v1/notifications/${editingId.value}`, payload);
     } else {
-      await api.post('/api/v1/notifications', form.value);
+      await api.post('/api/v1/notifications', payload);
     }
     showForm.value = false;
     await fetchChannels();
@@ -107,6 +116,11 @@ onMounted(fetchChannels);
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{{ field.label }}</label>
             <input v-model="form.config[field.key]" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" :placeholder="field.placeholder" />
           </div>
+          <p v-if="form.type === 'telegram'" class="text-xs text-gray-500 dark:text-gray-400">
+            The bot token is configured once in
+            <router-link to="/telegram" class="text-primary-600 dark:text-primary-400 hover:underline">Telegram Bot</router-link>
+            settings. Each Telegram channel only stores a chat ID.
+          </p>
           <label class="flex items-center gap-2">
             <input type="checkbox" v-model="form.is_default" class="rounded" />
             <span class="text-sm text-gray-700 dark:text-gray-300">Default channel (notify for all monitors)</span>

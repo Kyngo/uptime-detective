@@ -49,7 +49,6 @@ const configFields = computed(() => {
       return [{ key: 'webhook_url', label: 'Discord Webhook URL', placeholder: 'https://discord.com/api/webhooks/...' }];
     case 'telegram':
       return [
-        { key: 'bot_token', label: 'Bot Token', placeholder: '123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11' },
         { key: 'chat_id', label: 'Chat ID', placeholder: '-1001234567890' },
       ];
     default:
@@ -292,6 +291,11 @@ async function completeSetup() {
                 :placeholder="field.placeholder"
               />
             </div>
+
+            <p v-if="notifForm.type === 'telegram'" class="text-xs text-gray-500 dark:text-gray-400">
+              The bot token is configured once after setup in
+              <span class="font-medium">Settings → Telegram Bot</span>. This channel only stores a chat ID.
+            </p>
 
             <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
               <input v-model="notifForm.is_default" type="checkbox" class="rounded border-gray-300 dark:border-gray-600" />

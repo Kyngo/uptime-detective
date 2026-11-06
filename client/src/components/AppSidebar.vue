@@ -18,6 +18,7 @@ const navItems = [
   { path: '/groups', label: 'Groups', icon: '📁' },
   { path: '/status-pages', label: 'Status Pages', icon: '🌐' },
   { path: '/notifications', label: 'Notifications', icon: '🔔' },
+  { path: '/telegram', label: 'Telegram Bot', icon: '✈️' },
   { path: '/maintenance', label: 'Maintenance', icon: '🔧' },
   { path: '/settings', label: 'Settings', icon: '⚙️' },
 ];

@@ -203,6 +203,43 @@ CREATE TABLE settings (
 );
 ```
 
+### telegram_users
+
+Telegram users known to the bot (allowed and pending). Every user that contacts the bot is tracked here; only rows with `is_allowed = 1` may run commands.
+
+```sql
+CREATE TABLE telegram_users (
+  telegram_user_id INTEGER PRIMARY KEY,
+  chat_id INTEGER,
+  username TEXT,
+  first_name TEXT,
+  last_name TEXT,
+  is_allowed INTEGER NOT NULL DEFAULT 0,
+  allowed_by INTEGER,
+  last_seen_at DATETIME,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### monitor_mutes
+
+Active and expired alert mutes, per monitor or global. A row with `monitor_id IS NULL` is a global mute. Expired mutes are always filtered out on read and are pruned when mutes are created or removed.
+
+```sql
+CREATE TABLE monitor_mutes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  monitor_id INTEGER REFERENCES monitors(id) ON DELETE CASCADE,
+  muted_until DATETIME NOT NULL,
+  muted_by TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+Muting suppresses notifications only; checks keep running. Deleting a monitor cascades its mutes.
+
+The bot settings themselves live in the `settings` table (token, username, enabled flag, Mini App URL), not in a dedicated table.
+
 ## Indexes
 
 ```sql
@@ -212,6 +249,9 @@ CREATE INDEX idx_incidents_monitor ON incidents(monitor_id);
 CREATE INDEX idx_incidents_open ON incidents(monitor_id, resolved_at) WHERE resolved_at IS NULL;
 CREATE INDEX idx_monitors_group ON monitors(group_id);
 CREATE INDEX idx_monitors_active ON monitors(active) WHERE active = 1;
+CREATE INDEX idx_telegram_users_allowed ON telegram_users(is_allowed);
+CREATE INDEX idx_monitor_mutes_monitor ON monitor_mutes(monitor_id);
+CREATE INDEX idx_monitor_mutes_until ON monitor_mutes(muted_until);
 ```
 
 The most critical index is `idx_checks_monitor_created` — it supports the primary query pattern of "get recent checks for a specific monitor."
@@ -232,6 +272,15 @@ CREATE TABLE _migrations (
 - Each migration runs in a transaction (atomic)
 - Already-applied migrations are skipped
 - New migrations are added to the `MIGRATIONS` array in `server/src/db/migrate.ts`
+
+### Migration v3 — Telegram bot and mutes
+
+Version 3 adds:
+
+- The `telegram_users` and `monitor_mutes` tables (with indexes)
+- A legacy token import: if no `telegram_bot_token` setting exists yet, the first `telegram` notification channel whose config contains `bot_token` donates that token to the instance settings (`telegram_bot_token`, and `telegram_bot_enabled = '1'` if that setting does not exist yet). The token is then removed from the channel config, which keeps its `chat_id`. Malformed channel JSON is skipped instead of failing the migration.
+
+After upgrading, old channels still contain a `chat_id` and keep working with the global token. No manual step is required.
 
 To run manually: `npm run db:migrate`
 

@@ -16,7 +16,7 @@ export interface CheckResult {
 /**
  * Check if an IP address is in a private/reserved range (SSRF protection).
  */
-function isPrivateIp(ip: string): boolean {
+export function isPrivateIp(ip: string): boolean {
   // IPv4 private/reserved ranges
   const parts = ip.split('.').map(Number);
   if (parts.length === 4) {

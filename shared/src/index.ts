@@ -187,3 +187,74 @@ export interface ClientToServerEvents {
   'subscribe:monitor': (monitor_id: number) => void;
   'unsubscribe:monitor': (monitor_id: number) => void;
 }
+
+// === Telegram Bot ===
+
+export interface TelegramUserRecord {
+  telegram_user_id: number;
+  chat_id: number | null;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  is_allowed: boolean;
+  allowed_by: number | null;
+  last_seen_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TelegramTokenSource = 'env' | 'settings' | 'none';
+
+export interface TelegramBotStatus {
+  configured: boolean;
+  enabled: boolean;
+  running: boolean;
+  bot_username: string | null;
+  started_at: string | null;
+  last_error: string | null;
+  updates_processed: number;
+  token_source: TelegramTokenSource;
+}
+
+export interface TelegramBotSettingsResponse {
+  enabled: boolean;
+  bot_token_set: boolean;
+  /** Masked hint only (e.g. "12345678…wxyz"). Never the full token. */
+  bot_token_hint: string | null;
+  bot_username: string | null;
+  webapp_url: string | null;
+  api_base_url: string;
+  token_source: TelegramTokenSource;
+  status: TelegramBotStatus;
+}
+
+export interface UpdateTelegramSettingsRequest {
+  enabled?: boolean;
+  bot_token?: string | null;
+  webapp_url?: string | null;
+}
+
+export interface AllowTelegramUserRequest {
+  telegram_user_id: number;
+  username?: string | null;
+  is_allowed?: boolean;
+}
+
+export interface TelegramWebAppAuthRequest {
+  init_data: string;
+}
+
+export interface TelegramWebAppAuthResponse {
+  token: string;
+  user: { id: number; username: string; role: UserRole };
+  telegram_user: { id: number; username: string | null };
+}
+
+export interface MonitorMute {
+  id: number;
+  /** null = all monitors */
+  monitor_id: number | null;
+  muted_until: string;
+  muted_by: string | null;
+  created_at: string;
+}

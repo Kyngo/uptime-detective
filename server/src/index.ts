@@ -18,6 +18,8 @@ import { setupSocketIO } from './socket.js';
 import { migrate } from './db/migrate.js';
 import { getDb, closeDb } from './db/connection.js';
 import { startAllMonitors, stopAllMonitors } from './services/scheduler.js';
+import { bootstrapTelegramAdmins } from './services/telegram/allowlist.js';
+import { startTelegramBot, stopTelegramBot } from './services/telegram/bot.js';
 
 const PORT = parseInt(process.env.PORT || '3300', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -70,11 +72,13 @@ async function main() {
   const { notificationsRouter } = await import('./routes/notifications.js');
   const { maintenanceRouter } = await import('./routes/maintenance.js');
   const { setupRouter } = await import('./routes/setup.js');
+  const { telegramRouter } = await import('./routes/telegram.js');
 
   app.use('/api/v1/setup', setupRouter); // Public — no auth required
   app.use('/api/v1/auth', authRouter);
   app.use('/api/v1', heartbeatRouter); // Public — no auth required
   app.use('/api/v1', publicStatusRouter); // Public — no auth required
+  app.use('/api/v1/telegram', telegramRouter); // Public webapp/auth handled inside the router
   app.use('/api/v1', monitorsRouter);
   app.use('/api/v1', groupsRouter);
   app.use('/api/v1', statusPagesRouter);
@@ -88,12 +92,26 @@ async function main() {
 
     // Start all active monitors after server is listening
     startAllMonitors();
+
+    // Telegram: bootstrap the allow list from TELEGRAM_ADMIN_USER_IDS, then start long polling.
+    // Failures are logged, never fatal for the HTTP server.
+    try {
+      bootstrapTelegramAdmins();
+    } catch (error) {
+      console.error('[telegram] Failed to bootstrap admins:', error);
+    }
+    startTelegramBot().catch((error) => console.error('[telegram] Failed to start bot:', error));
   });
 
   // Graceful shutdown
-  const shutdown = () => {
+  const shutdown = async () => {
     console.log('\n[server] Shutting down...');
     stopAllMonitors();
+    try {
+      await stopTelegramBot();
+    } catch (error) {
+      console.error('[telegram] Failed to stop bot cleanly:', error);
+    }
     httpServer.close(() => {
       closeDb();
       console.log('[server] Goodbye!');
@@ -104,8 +122,8 @@ async function main() {
     setTimeout(() => process.exit(1), 5000);
   };
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', () => { void shutdown(); });
+  process.on('SIGTERM', () => { void shutdown(); });
 }
 
 main().catch((err) => {
