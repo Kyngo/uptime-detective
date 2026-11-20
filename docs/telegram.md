@@ -99,7 +99,7 @@ All commands are available to allowed users only. Commands that take a monitor a
 | `/start` | `/start` | Welcome message with your Telegram user ID and allow-list status. Always answered, even for unknown users. |
 | `/help` | `/help` | List of all bot commands. |
 | `/status` | `/status` | Status overview: counts per status and a paginated monitor list (10 per page, ◀ Prev / Next ▶ buttons). Each line shows status emoji, `#id`, name, target, response time, 24h uptime, a paused marker and the remaining mute time. |
-| `/info` | `/info <ref>` | Full monitor detail: type, target, group, tags, interval, timeout, retries, active state, current status, last check, 24h uptime, last incident, mute state. Heartbeat monitors show their heartbeat URL (`APP_URL` + path when `APP_URL` is set, otherwise the relative path). |
+| `/info` | `/info <ref>` | Full monitor detail: type, target, group, tags, interval, timeout, retries, failure/recovery thresholds, active state, current status, last check, 24h uptime, last incident, mute state. Heartbeat monitors show their heartbeat URL (`APP_URL` + path when `APP_URL` is set, otherwise the relative path). |
 | `/add` | `/add` | Interactive wizard: type → target → name → group → interval → create. |
 | `/add` (one-shot) | `/add <type> <target> [name] [group:<id\|name>]` | Create a monitor in one message. The name may be quoted; when omitted it is derived from the target. |
 | `/edit` | `/edit <ref> [new target]` | Change a monitor's target. Without a target argument the bot asks for it. |

@@ -13,6 +13,7 @@ A self-hosted uptime monitoring system built with Vue 3 and Express.js. Monitor 
 - **Real-time Dashboard** — Live status updates via WebSocket (Socket.IO)
 - **Response Time Charts** — Chart.js graphs with selectable timeframes (1h, 6h, 24h, 7d, 30d)
 - **Incident Tracking** — Auto-created on downtime, auto-resolved on recovery
+- **Confirmation Thresholds** — Per-monitor failure/recovery thresholds prevent single-error alert flapping
 - **Public Status Pages** — Customizable pages with 90-day uptime bars
 - **Notifications** — Webhook, Email (SMTP), Slack, Discord, Telegram
 - **Telegram Bot Control** — Two-way bot: status, add/edit/remove/pause/resume monitors, mutes, allow list, and the dashboard as a Telegram Mini App

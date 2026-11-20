@@ -45,6 +45,9 @@ CREATE TABLE monitors (
   timeout INTEGER DEFAULT 10000,
   retries INTEGER DEFAULT 1,
   retry_interval INTEGER DEFAULT 30,
+  failure_threshold INTEGER NOT NULL DEFAULT 1,
+  recovery_threshold INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'pending',
   config JSON DEFAULT '{}',
   group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL,
   tags JSON DEFAULT '[]',
@@ -54,6 +57,12 @@ CREATE TABLE monitors (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+`failure_threshold` and `recovery_threshold` are the number of consecutive
+failed / successful checks required to change the **reported status**
+(`status`: one of `pending`, `up`, `down`, `degraded`, `maintenance`). The
+`checks` table keeps every individual result regardless of thresholds. On
+upgrade, migration v4 backfills `status` from each monitor's latest check.
 
 ### checks
 
@@ -281,6 +290,16 @@ Version 3 adds:
 - A legacy token import: if no `telegram_bot_token` setting exists yet, the first `telegram` notification channel whose config contains `bot_token` donates that token to the instance settings (`telegram_bot_token`, and `telegram_bot_enabled = '1'` if that setting does not exist yet). The token is then removed from the channel config, which keeps its `chat_id`. Malformed channel JSON is skipped instead of failing the migration.
 
 After upgrading, old channels still contain a `chat_id` and keep working with the global token. No manual step is required.
+
+### Migration v4 — Monitor thresholds
+
+Version 4 adds:
+
+- `monitors.failure_threshold` (default `1`) and `monitors.recovery_threshold` (default `1`)
+- `monitors.status`, the persisted reported status (default `pending`)
+- A backfill of `status` from each monitor's latest `checks` row, so existing monitors display the same status immediately after the upgrade
+
+Defaults preserve the previous behaviour: one failed check is still enough to report DOWN and one successful check is enough to report UP. Increase the thresholds per monitor to require confirmation.
 
 To run manually: `npm run db:migrate`
 

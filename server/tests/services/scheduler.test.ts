@@ -30,7 +30,8 @@ import type { Monitor } from '@uptime-detective/shared';
 function createMonitor(overrides: Partial<Monitor> = {}): Monitor {
   return {
     id: 1, name: 'Test', type: 'http', target: 'https://example.com',
-    interval: 60, timeout: 5000, retries: 0, retry_interval: 5, config: {},
+    interval: 60, timeout: 5000, retries: 0, retry_interval: 5,
+    failure_threshold: 1, recovery_threshold: 1, status: 'pending', config: {},
     group_id: null, tags: [], active: true, heartbeat_token: null,
     created_at: '', updated_at: '',
     ...overrides,

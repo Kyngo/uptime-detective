@@ -4,7 +4,7 @@ import type { Monitor, Check, CheckStatus, MonitorStatus } from '@uptime-detecti
 import { getDb } from '../../db/connection.js';
 import { getIO } from '../../socket.js';
 import { dispatchNotifications, type NotificationPayload } from '../notifiers/dispatcher.js';
-import { persistCheck, handleStatusTransition as sharedHandleStatusTransition, emitCheckResult } from './shared.js';
+import { processCheckResult } from './shared.js';
 
 export interface CheckResult {
   status: CheckStatus;
@@ -194,9 +194,7 @@ export async function executeCheck(monitor: Monitor): Promise<void> {
   if (!result) return;
 
   // Persist, detect transitions, emit
-  persistCheck(monitor.id, result);
-  sharedHandleStatusTransition(monitor, result);
-  emitCheckResult(monitor.id, result);
+  processCheckResult(monitor, result);
 }
 
 function parseAcceptedStatusCodes(spec: string): number[] {

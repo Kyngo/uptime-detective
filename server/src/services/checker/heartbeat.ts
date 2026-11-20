@@ -1,7 +1,7 @@
 import type { Monitor } from '@uptime-detective/shared';
 import type { CheckResult } from './http.js';
 import { getDb } from '../../db/connection.js';
-import { persistCheck, handleStatusTransition, emitCheckResult } from './shared.js';
+import { processCheckResult } from './shared.js';
 
 /**
  * Heartbeat (push) monitor checker.
@@ -36,25 +36,16 @@ export async function executeHeartbeatCheck(monitor: Monitor): Promise<void> {
     }
   }
 
-  persistCheck(monitor.id, result);
-  handleStatusTransition(monitor, result);
-  emitCheckResult(monitor.id, result);
+  processCheckResult(monitor, result);
 }
 
 /**
  * Record a heartbeat push from an external service.
  */
 export function recordHeartbeat(monitor: Monitor): void {
-  const db = getDb();
   const result: CheckResult = { status: 1, response_time: null, status_code: null, message: 'Heartbeat received' };
 
-  persistCheck(monitor.id, result);
-
-  // If previous was DOWN, resolve incident via shared handler
-  const prev = db.prepare('SELECT status FROM checks WHERE monitor_id = ? ORDER BY created_at DESC LIMIT 1 OFFSET 1').get(monitor.id) as { status: number } | undefined;
-  if (prev?.status === 0) {
-    handleStatusTransition(monitor, result);
-  }
-
-  emitCheckResult(monitor.id, result);
+  // Applies recovery thresholds: a DOWN monitor only recovers after enough
+  // consecutive heartbeats.
+  processCheckResult(monitor, result);
 }

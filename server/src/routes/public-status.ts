@@ -2,6 +2,7 @@ import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { getDb } from '../db/connection.js';
 import type { MonitorStatus } from '@uptime-detective/shared';
+import { normalizeMonitorStatus } from '../services/checker/thresholds.js';
 
 export const publicStatusRouter = Router();
 
@@ -100,10 +101,9 @@ publicStatusRouter.get('/status/:slug', (req, res) => {
 });
 
 function enrichMonitor(db: any, monitor: any) {
-  // Current status from latest check
-  const lastCheck = db.prepare('SELECT * FROM checks WHERE monitor_id = ? ORDER BY created_at DESC LIMIT 1').get(monitor.id) as any;
-  const statusMap: Record<number, MonitorStatus> = { 0: 'down', 1: 'up', 2: 'degraded', 3: 'maintenance' };
-  const currentStatus: MonitorStatus = lastCheck ? (statusMap[lastCheck.status] || 'down') : 'pending';
+  // Reported status is the confirmed status persisted on the monitor: it only
+  // flips after the configured failure/recovery threshold is reached.
+  const currentStatus: MonitorStatus = normalizeMonitorStatus(monitor.status);
 
   // 90-day uptime
   const uptimeRow = db.prepare(`

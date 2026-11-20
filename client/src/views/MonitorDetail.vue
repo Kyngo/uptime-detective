@@ -132,6 +132,10 @@ function channelIcon(type: string): string {
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ monitor.name }}</h1>
         </div>
         <p class="text-gray-500 mt-1">{{ monitor.target }}</p>
+        <p class="text-xs text-gray-400 mt-1">
+          Reports DOWN after {{ monitor.failure_threshold }} failed check{{ monitor.failure_threshold === 1 ? '' : 's' }}
+          · UP after {{ monitor.recovery_threshold }} successful check{{ monitor.recovery_threshold === 1 ? '' : 's' }}
+        </p>
         <div v-if="monitor.tags && monitor.tags.length > 0" class="flex flex-wrap gap-1.5 mt-2">
           <span v-for="tag in monitor.tags" :key="tag" class="text-xs px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300">{{ tag }}</span>
         </div>

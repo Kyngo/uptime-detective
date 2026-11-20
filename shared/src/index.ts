@@ -36,6 +36,12 @@ export interface Monitor {
   timeout: number;
   retries: number;
   retry_interval: number;
+  /** Consecutive failed checks required before the monitor is reported DOWN. */
+  failure_threshold: number;
+  /** Consecutive successful checks required before a DOWN monitor is reported UP again. */
+  recovery_threshold: number;
+  /** Last reported (confirmed) status, persisted so thresholds survive restarts. */
+  status: MonitorStatus;
   config: MonitorConfig;
   group_id: number | null;
   tags: string[];
@@ -142,6 +148,8 @@ export interface CreateMonitorRequest {
   timeout?: number;
   retries?: number;
   retry_interval?: number;
+  failure_threshold?: number;
+  recovery_threshold?: number;
   config?: MonitorConfig;
   group_id?: number | null;
   tags?: string[];

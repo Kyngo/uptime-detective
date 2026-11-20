@@ -76,6 +76,8 @@ Both are validated by the same middleware.
   "timeout": 10000,
   "retries": 2,
   "retry_interval": 30,
+  "failure_threshold": 3,
+  "recovery_threshold": 2,
   "config": {
     "method": "GET",
     "accepted_status_codes": "200-299",
@@ -92,6 +94,13 @@ Both are validated by the same middleware.
 { "id": 1, "name": "My API", "type": "http", ... }
 ```
 
+`failure_threshold` (default `1`) is the number of **consecutive failed checks**
+required before the monitor is reported DOWN. `recovery_threshold` (default
+`1`) is the number of **consecutive successful checks** required before a DOWN
+monitor is reported UP. Both accept integers from `1` to `100`. Every check is
+still stored; only the reported status, incident lifecycle and notifications
+wait for the threshold. See [Monitors](./monitors.md#failure-and-recovery-thresholds).
+
 ### GET /monitors/:id
 
 Returns the monitor with enriched status fields:
@@ -102,6 +111,8 @@ Returns the monitor with enriched status fields:
   "name": "My API",
   "type": "http",
   "target": "https://api.example.com/health",
+  "failure_threshold": 3,
+  "recovery_threshold": 2,
   "current_status": "up",
   "last_check": { "status": 1, "response_time": 142, "created_at": "..." },
   "uptime_24h": 99.95,
@@ -109,6 +120,10 @@ Returns the monitor with enriched status fields:
   ...
 }
 ```
+
+`current_status` is the confirmed reported status. `last_check` is the most
+recent raw check and may show `status: 0` while `current_status` is still `up`
+when the failure threshold has not been reached yet.
 
 ### GET /monitors/:id/checks
 

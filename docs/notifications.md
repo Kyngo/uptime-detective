@@ -106,10 +106,16 @@ Legacy configuration: an old channel config that still contains a `bot_token` ke
 
 | Event | Description |
 |-------|-------------|
-| Monitor DOWN | Check failed after all retries — service is unreachable |
-| Monitor RECOVERY | Previously down monitor is back UP |
+| Monitor DOWN | `failure_threshold` consecutive checks failed — service is unreachable |
+| Monitor RECOVERY | `recovery_threshold` consecutive checks succeeded on a DOWN monitor |
 | TLS DEGRADED | Certificate expiring within warning threshold |
 | Heartbeat MISSED | No heartbeat received within 2× interval |
+
+Both thresholds default to `1`, which preserves the classic behaviour (alert on
+the first failure, recover on the first success). Raising them on a monitor
+delays the DOWN and RECOVERY alerts until the configured number of consecutive
+checks confirms the change, preventing single-error alert flapping. See
+[Monitors](./monitors.md#failure-and-recovery-thresholds).
 
 ## Linking Channels to Monitors
 

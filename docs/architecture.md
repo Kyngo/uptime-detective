@@ -68,31 +68,37 @@ flowchart TD
     C -->|No| E{Retries remaining?}
     E -->|Yes| F[Wait retry_interval] --> B
     E -->|No| G[Record DOWN in checks table]
-    D --> H{Status changed?}
+    D --> H{Failure/recovery<br/>threshold reached?}
     G --> H
-    H -->|Yes| I[Create/resolve incident]
+    H -->|No| K[Keep reported status]
+    H -->|Yes| I[Update reported status,<br/>create/resolve incident]
     I --> M{Maintenance window<br/>or monitor muted?}
     M -->|Yes| N[Suppress notification]
     M -->|No| J[Fire notifications]
-    J --> K[Emit Socket.IO event]
+    J --> K
     N --> K
-    H -->|No| K
+    K --> L[Emit Socket.IO event]
 ```
 
 ### Status Transitions
 
+The status shown on the dashboard and status pages is the monitor's **reported
+status**, persisted in `monitors.status`. A single check never changes it
+directly: failures and recoveries must be confirmed by the monitor's
+`failure_threshold` / `recovery_threshold` (consecutive checks). This is what
+prevents one-off errors from opening an incident and immediately closing it
+again. See [Monitors](./monitors.md#failure-and-recovery-thresholds).
+
 | From | To | Action |
 |------|----|--------|
-| UP | DOWN | Create incident, notify (alert) |
-| DOWN | UP | Resolve incident, notify (recovery) |
-| UP | DEGRADED | TLS cert expiring within warning threshold |
+| UP / pending / degraded | DOWN | After `failure_threshold` consecutive failures: create incident, notify (alert) |
+| DOWN | UP | After `recovery_threshold` consecutive successes: resolve incident, notify (recovery) |
+| UP | DEGRADED | TLS cert expiring within warning threshold (immediate) |
 | Any | MAINTENANCE | During active maintenance window |
 
-Status codes in the database:
-- `0` = DOWN
-- `1` = UP
-- `2` = DEGRADED
-- `3` = MAINTENANCE
+The raw check results are always stored in `checks` (`0` = DOWN, `1` = UP,
+`2` = DEGRADED, `3` = MAINTENANCE), so the history and uptime calculations keep
+every attempt even when the reported status did not change.
 
 ### Scheduler Internals
 

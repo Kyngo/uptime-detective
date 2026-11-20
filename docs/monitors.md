@@ -24,9 +24,51 @@ Every monitor has these common fields:
 | `timeout` | integer | `10000` | Max wait time in ms |
 | `retries` | integer | `1` | Retry count before marking DOWN |
 | `retry_interval` | integer | `30` | Seconds between retries |
+| `failure_threshold` | integer | `1` | Consecutive failed checks before the monitor is reported DOWN (1–100) |
+| `recovery_threshold` | integer | `1` | Consecutive successful checks before a DOWN monitor is reported UP (1–100) |
 | `group_id` | integer | `null` | Optional group assignment |
 | `tags` | string[] | `[]` | Tags for filtering |
 | `active` | boolean | `true` | Paused monitors don't run checks |
+
+## Failure and Recovery Thresholds
+
+By default a monitor flips to DOWN on the first failed check (after the
+in-check `retries` are exhausted) and back to UP on the first successful check.
+That makes a single transient error enough to open an incident — and a single
+successful check enough to close it again.
+
+`failure_threshold` and `recovery_threshold` add confirmation to both
+directions, per monitor:
+
+- Every check is still recorded in `checks` and stays visible in the history.
+- The **reported status** only changes after the configured number of
+  **consecutive** checks:
+  - `failure_threshold` consecutive failed checks → DOWN (incident + alert).
+  - `recovery_threshold` consecutive successful checks → UP (incident resolved +
+    recovery alert).
+- A check of the opposite result resets the current streak.
+- While a streak is still below its threshold the monitor keeps its previous
+  reported status, so a single blip never creates an incident or a recovery
+  notification.
+- DEGRADED (TLS expiry warning) still applies immediately; it is not queued.
+
+The distinction from `retries` matters: `retries` are extra attempts **inside a
+single scheduled check**, while the thresholds count **consecutive scheduled
+checks** (or heartbeat beats). Use both when you want retries for flaky
+connections and confirmation across check cycles.
+
+**Example** — `interval: 60`, `failure_threshold: 3`, `recovery_threshold: 2`:
+
+| Check | Result | Reported status | Incident / notification |
+|-------|--------|-----------------|-------------------------|
+| 1 | fail | UP (unchanged) | none |
+| 2 | fail | UP (unchanged) | none |
+| 3 | fail | **DOWN** | incident opened, DOWN alert |
+| 4 | success | DOWN (unchanged) | none |
+| 5 | success | **UP** | incident resolved, recovery alert |
+
+Thresholds can be edited at any time from **Monitors → Edit monitor** or via
+`PUT /api/v1/monitors/:id`. The new values take effect on the next check.
 
 ## HTTP Monitors
 
@@ -95,7 +137,7 @@ Unlike other types, heartbeat monitors are **passive**. Instead of the system ch
 2. A unique token is auto-generated (visible in monitor detail)
 3. Your service pings the heartbeat URL periodically
 4. The scheduler checks if a beat was received within 2× the configured interval
-5. If no beat received: marked DOWN, notifications fire
+5. If no beat received: marked DOWN after `failure_threshold` consecutive missed checks, notifications fire
 
 ### Usage
 
@@ -125,7 +167,7 @@ Newly created heartbeat monitors have a grace period — they won't be marked DO
 | Code | Status | Meaning |
 |------|--------|---------|
 | 1 | UP | Check passed successfully |
-| 0 | DOWN | Check failed after all retries |
+| 0 | DOWN | `failure_threshold` consecutive checks failed (after in-check retries) |
 | 2 | DEGRADED | Partially working (e.g., TLS cert expiring soon) |
 | 3 | MAINTENANCE | Monitor is under a maintenance window |
 

@@ -20,6 +20,8 @@ const form = ref({
   timeout: 10000,
   retries: 1,
   retry_interval: 30,
+  failure_threshold: 1,
+  recovery_threshold: 1,
   config: {
     method: 'GET',
     headers: '',
@@ -51,6 +53,8 @@ onMounted(async () => {
       form.value.timeout = monitor.timeout;
       form.value.retries = monitor.retries;
       form.value.retry_interval = monitor.retry_interval;
+      form.value.failure_threshold = monitor.failure_threshold ?? 1;
+      form.value.recovery_threshold = monitor.recovery_threshold ?? 1;
       form.value.active = monitor.active;
       form.value.group_id = monitor.group_id || null;
       form.value.tags = (monitor.tags || []).join(', ');
@@ -82,6 +86,8 @@ async function submit() {
       timeout: form.value.timeout,
       retries: form.value.retries,
       retry_interval: form.value.retry_interval,
+      failure_threshold: form.value.failure_threshold,
+      recovery_threshold: form.value.recovery_threshold,
       active: form.value.active,
       group_id: form.value.group_id || null,
       tags: form.value.tags.split(',').map(t => t.trim()).filter(Boolean),
@@ -161,6 +167,19 @@ async function submit() {
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Retry Interval (s)</label>
           <input v-model.number="form.retry_interval" type="number" min="5" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Failures before DOWN</label>
+          <input v-model.number="form.failure_threshold" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Consecutive failed checks needed to report a failure. 1 = alert on the first failure.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Successes before UP</label>
+          <input v-model.number="form.recovery_threshold" type="number" min="1" max="100" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Consecutive successful checks needed to report recovery. 1 = recover on the first success.</p>
         </div>
       </div>
 

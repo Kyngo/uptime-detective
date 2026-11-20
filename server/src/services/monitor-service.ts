@@ -17,6 +17,13 @@ import type {
 import { getDb } from '../db/connection.js';
 import { startMonitorJob, stopMonitorJob, updateMonitorJob } from './scheduler.js';
 import { getIO } from '../socket.js';
+import {
+  DEFAULT_FAILURE_THRESHOLD,
+  DEFAULT_RECOVERY_THRESHOLD,
+  MAX_THRESHOLD,
+  normalizeMonitorStatus,
+  normalizeThreshold,
+} from './checker/thresholds.js';
 
 export const VALID_MONITOR_TYPES: MonitorType[] = ['http', 'icmp', 'dns', 'tls', 'tcp', 'heartbeat'];
 
@@ -39,6 +46,9 @@ export function parseMonitorRow(row: any): Monitor {
     config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config || {},
     tags: typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags || [],
     active: Boolean(row.active),
+    failure_threshold: normalizeThreshold(row.failure_threshold, DEFAULT_FAILURE_THRESHOLD),
+    recovery_threshold: normalizeThreshold(row.recovery_threshold, DEFAULT_RECOVERY_THRESHOLD),
+    status: normalizeMonitorStatus(row.status),
   };
 }
 
@@ -52,6 +62,16 @@ export function validateCreateMonitorInput(
   if (!VALID_MONITOR_TYPES.includes(input.type)) {
     return `type must be one of: ${VALID_MONITOR_TYPES.join(', ')}`;
   }
+
+  for (const field of ['failure_threshold', 'recovery_threshold'] as const) {
+    const value = input[field];
+    if (value === undefined || value === null) continue;
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_THRESHOLD) {
+      return `${field} must be an integer between 1 and ${MAX_THRESHOLD}`;
+    }
+  }
+
   return null;
 }
 
@@ -64,17 +84,27 @@ function emitMonitorEvent(event: 'monitor:created' | 'monitor:updated' | 'monito
   }
 }
 
-export function getMonitorStatusInfo(monitorId: number): MonitorStatusInfo {
+export function getMonitorStatusInfo(
+  monitorId: number,
+  reportedStatus?: MonitorStatus
+): MonitorStatusInfo {
   const db = getDb();
 
   const lastCheck = db
-    .prepare('SELECT * FROM checks WHERE monitor_id = ? ORDER BY created_at DESC LIMIT 1')
+    .prepare('SELECT * FROM checks WHERE monitor_id = ? ORDER BY created_at DESC, id DESC LIMIT 1')
     .get(monitorId) as any;
 
-  let status: MonitorStatus = 'pending';
-  if (lastCheck) {
-    const statusMap: Record<number, MonitorStatus> = { 0: 'down', 1: 'up', 2: 'degraded', 3: 'maintenance' };
-    status = statusMap[lastCheck.status] || 'down';
+  // `status` is the confirmed/reported status: it only changes once the
+  // monitor's failure or recovery threshold has been reached. Checks are still
+  // recorded individually and remain visible in the history.
+  let status: MonitorStatus;
+  if (reportedStatus !== undefined) {
+    status = normalizeMonitorStatus(reportedStatus);
+  } else {
+    const monitorRow = db
+      .prepare('SELECT status FROM monitors WHERE id = ?')
+      .get(monitorId) as { status: string } | undefined;
+    status = monitorRow ? normalizeMonitorStatus(monitorRow.status) : 'pending';
   }
 
   const uptimeRow = db.prepare(`
@@ -122,7 +152,7 @@ export function listMonitorsWithStatus(filters: MonitorListFilters = {}): Monito
   const rows = db.prepare(query).all(...params) as any[];
   const monitors: MonitorWithStatus[] = rows.map((row) => {
     const monitor = parseMonitorRow(row);
-    const { status, lastCheck, uptime24h, avgResponseTime } = getMonitorStatusInfo(monitor.id);
+    const { status, lastCheck, uptime24h, avgResponseTime } = getMonitorStatusInfo(monitor.id, monitor.status);
 
     return {
       ...monitor,
@@ -146,7 +176,7 @@ export function getMonitorWithStatus(id: number): MonitorWithStatus | null {
   if (!row) return null;
 
   const monitor = parseMonitorRow(row);
-  const { status, lastCheck, uptime24h, avgResponseTime } = getMonitorStatusInfo(monitor.id);
+  const { status, lastCheck, uptime24h, avgResponseTime } = getMonitorStatusInfo(monitor.id, monitor.status);
 
   return {
     ...monitor,
@@ -170,8 +200,8 @@ export function createMonitor(input: CreateMonitorRequest): Monitor {
   const heartbeatToken = input.type === 'heartbeat' ? crypto.randomBytes(16).toString('hex') : null;
 
   const result = db.prepare(`
-    INSERT INTO monitors (name, type, target, interval, timeout, retries, retry_interval, config, group_id, tags, active, heartbeat_token)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO monitors (name, type, target, interval, timeout, retries, retry_interval, failure_threshold, recovery_threshold, config, group_id, tags, active, heartbeat_token)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     input.name,
     input.type,
@@ -180,6 +210,8 @@ export function createMonitor(input: CreateMonitorRequest): Monitor {
     input.timeout || 10000,
     input.retries || 1,
     input.retry_interval || 30,
+    normalizeThreshold(input.failure_threshold, DEFAULT_FAILURE_THRESHOLD),
+    normalizeThreshold(input.recovery_threshold, DEFAULT_RECOVERY_THRESHOLD),
     JSON.stringify(input.config || {}),
     input.group_id || null,
     JSON.stringify(input.tags || []),
@@ -219,6 +251,8 @@ export function updateMonitor(id: number, input: UpdateMonitorRequest): Monitor 
       timeout = COALESCE(?, timeout),
       retries = COALESCE(?, retries),
       retry_interval = COALESCE(?, retry_interval),
+      failure_threshold = COALESCE(?, failure_threshold),
+      recovery_threshold = COALESCE(?, recovery_threshold),
       config = COALESCE(?, config),
       group_id = ?,
       tags = COALESCE(?, tags),
@@ -234,6 +268,12 @@ export function updateMonitor(id: number, input: UpdateMonitorRequest): Monitor 
     input.timeout !== undefined ? input.timeout : null,
     input.retries !== undefined ? input.retries : null,
     input.retry_interval !== undefined ? input.retry_interval : null,
+    input.failure_threshold !== undefined
+      ? normalizeThreshold(input.failure_threshold, DEFAULT_FAILURE_THRESHOLD)
+      : null,
+    input.recovery_threshold !== undefined
+      ? normalizeThreshold(input.recovery_threshold, DEFAULT_RECOVERY_THRESHOLD)
+      : null,
     input.config ? JSON.stringify(input.config) : null,
     input.group_id !== undefined ? input.group_id : existing.group_id,
     input.tags ? JSON.stringify(input.tags) : null,

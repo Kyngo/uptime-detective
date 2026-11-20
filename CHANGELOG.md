@@ -1,5 +1,20 @@
 # Changelog
 
+## Monitor Confirmation Thresholds (2026-11-20)
+
+### Added
+- **Per-monitor failure threshold** — `failure_threshold` (1–100) sets how many consecutive failed checks are required before a monitor is reported DOWN, an incident is opened and alerts fire
+- **Per-monitor recovery threshold** — `recovery_threshold` (1–100) sets how many consecutive successful checks are required before a DOWN monitor is reported UP and its incident is resolved
+- Monitor form fields for both thresholds, with the current values shown on the monitor detail page and in the Telegram bot's `/info`
+- `PUT /api/v1/monitors/:id` and `POST /api/v1/monitors` accept both fields; invalid values are rejected/coerced to the supported range
+- Documentation for thresholds in [docs/monitors.md](docs/monitors.md#failure-and-recovery-thresholds)
+
+### Changed
+- The dashboard, status pages and Socket.IO `monitor:status` events now show the **confirmed** reported status, persisted in `monitors.status`. Raw results are still recorded for every check, so history and uptime calculations are unchanged
+- Notifications for DOWN and RECOVERY now fire when the configured thresholds are reached (defaults of `1` preserve the previous behaviour)
+- A monitor whose first check is a confirmed failure now opens an incident and sends a DOWN alert; previously the very first check was always silent and could only produce a recovery alert later
+- Database migration v4 adds `failure_threshold`, `recovery_threshold` and `status` to `monitors`, backfilling `status` from the latest check
+
 ## Telegram Bot Control (2026-11-06)
 
 ### Added

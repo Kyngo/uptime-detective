@@ -1,7 +1,7 @@
 import { Resolver } from 'dns/promises';
 import type { Monitor } from '@uptime-detective/shared';
 import type { CheckResult } from './http.js';
-import { persistCheck, handleStatusTransition, emitCheckResult } from './shared.js';
+import { processCheckResult } from './shared.js';
 
 export async function performDnsCheck(monitor: Monitor): Promise<CheckResult> {
   const config = monitor.config || {};
@@ -43,9 +43,7 @@ export async function executeDnsCheck(monitor: Monitor): Promise<void> {
   }
 
   if (!result) return;
-  persistCheck(monitor.id, result);
-  handleStatusTransition(monitor, result);
-  emitCheckResult(monitor.id, result);
+  processCheckResult(monitor, result);
 }
 
 async function resolveDns(resolver: Resolver, host: string, recordType: string): Promise<any> {

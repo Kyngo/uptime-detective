@@ -126,6 +126,7 @@ export function buildMonitorInfoMessage(
     `Group: ${options.groupName ? escapeHtml(options.groupName) : '—'}`,
     `Tags: ${monitor.tags.length > 0 ? monitor.tags.map((tag) => escapeHtml(tag)).join(', ') : '—'}`,
     `Interval: ${monitor.interval}s · Timeout: ${Math.round(monitor.timeout / 1000)}s · Retries: ${monitor.retries}`,
+    `Thresholds: DOWN after ${monitor.failure_threshold} failed check${monitor.failure_threshold === 1 ? '' : 's'} · UP after ${monitor.recovery_threshold} successful check${monitor.recovery_threshold === 1 ? '' : 's'}`,
     `Active: ${monitor.active ? '✅ yes' : '⏸ no'}`,
   ];
 

@@ -90,6 +90,9 @@ const MONITORS_SCHEMA = `
     timeout INTEGER DEFAULT 10000,
     retries INTEGER DEFAULT 1,
     retry_interval INTEGER DEFAULT 30,
+    failure_threshold INTEGER NOT NULL DEFAULT 1,
+    recovery_threshold INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'pending',
     config JSON DEFAULT '{}',
     group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL,
     tags JSON DEFAULT '[]',
@@ -203,6 +206,8 @@ function seedFixtures(db: Database.Database): void {
   db.prepare("INSERT INTO checks (monitor_id, status, response_time, status_code) VALUES (1, 1, 120, 200)").run();
   db.prepare("INSERT INTO checks (monitor_id, status, response_time, status_code, message) VALUES (2, 0, NULL, NULL, 'Connection refused')").run();
   db.prepare("INSERT INTO checks (monitor_id, status, response_time, status_code) VALUES (3, 1, 55, 200)").run();
+  db.prepare("UPDATE monitors SET status = 'up' WHERE id IN (1, 3)").run();
+  db.prepare("UPDATE monitors SET status = 'down' WHERE id = 2").run();
 
   db.prepare(
     "INSERT INTO incidents (monitor_id, started_at, cause) VALUES (2, datetime('now', '-10 minutes'), 'Connection refused')"

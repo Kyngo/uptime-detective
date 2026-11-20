@@ -1,7 +1,7 @@
 import tls from 'tls';
 import type { Monitor } from '@uptime-detective/shared';
 import type { CheckResult } from './http.js';
-import { persistCheck, handleStatusTransition, emitCheckResult } from './shared.js';
+import { processCheckResult } from './shared.js';
 
 export async function performTlsCheck(monitor: Monitor): Promise<CheckResult> {
   const config = monitor.config || {};
@@ -71,7 +71,5 @@ export async function executeTlsCheck(monitor: Monitor): Promise<void> {
   }
 
   if (!result) return;
-  persistCheck(monitor.id, result);
-  handleStatusTransition(monitor, result);
-  emitCheckResult(monitor.id, result);
+  processCheckResult(monitor, result);
 }

@@ -218,6 +218,33 @@ const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 4,
+    name: 'monitor_failure_thresholds',
+    sql: `
+      ALTER TABLE monitors ADD COLUMN failure_threshold INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE monitors ADD COLUMN recovery_threshold INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE monitors ADD COLUMN status TEXT NOT NULL DEFAULT 'pending';
+    `,
+    run: (db) => {
+      // Backfill the reported status from the latest check so existing
+      // monitors keep the status they had before the upgrade.
+      db.exec(`
+        UPDATE monitors SET status = COALESCE((
+          SELECT CASE c.status
+            WHEN 0 THEN 'down'
+            WHEN 1 THEN 'up'
+            WHEN 2 THEN 'degraded'
+            WHEN 3 THEN 'maintenance'
+          END
+          FROM checks c
+          WHERE c.monitor_id = monitors.id
+          ORDER BY c.created_at DESC, c.id DESC
+          LIMIT 1
+        ), 'pending');
+      `);
+    },
+  },
 ];
 
 export function migrate(): void {

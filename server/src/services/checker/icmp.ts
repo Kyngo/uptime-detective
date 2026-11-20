@@ -2,7 +2,7 @@ import { execFile } from 'child_process';
 import { platform } from 'os';
 import type { Monitor } from '@uptime-detective/shared';
 import type { CheckResult } from './http.js';
-import { persistCheck, handleStatusTransition, emitCheckResult } from './shared.js';
+import { processCheckResult } from './shared.js';
 
 // Only allow valid hostnames and IP addresses — no shell metacharacters
 const VALID_HOST_REGEX = /^[a-zA-Z0-9]([a-zA-Z0-9.\-]{0,253}[a-zA-Z0-9])?$/;
@@ -49,9 +49,7 @@ export async function executeIcmpCheck(monitor: Monitor): Promise<void> {
   }
 
   if (!result) return;
-  persistCheck(monitor.id, result);
-  handleStatusTransition(monitor, result);
-  emitCheckResult(monitor.id, result);
+  processCheckResult(monitor, result);
 }
 
 function parseRtt(stdout: string): number | null {
